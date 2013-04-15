@@ -48,7 +48,6 @@ func ScanFile(path string, matcher string, replacement string) {
         if err != nil && err != io.EOF { panic(err) }
 
         chunk := buf[:n]
-        fmt.Println(last)
 
         copyToMatch(match, chunk, last)
 
@@ -60,7 +59,6 @@ func ScanFile(path string, matcher string, replacement string) {
             readAhead = n
         }
         offset := matchLen - readAhead
-        fmt.Println(offset)
 
         if n == 0 {
             tempfile.Write(match[:matchLen])
