@@ -41,7 +41,7 @@ func ScanFile(path string, matcher string, replacement string) {
 
     buf   := make([]byte, 32)
     last  := make([]byte, len(matcher))
-    match := make([]byte, 64)
+    match := make([]byte, 1024)
 
     for {
         n, err := f.Read(buf)
