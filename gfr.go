@@ -39,7 +39,6 @@ func ScanFile(path string, matcher string, replacement string) {
     defer os.Remove(tempfile.Name())
     defer os.Rename(tempfile.Name(), path)
 
-    matchCount := 0
     buf   := make([]byte, 32)
     last  := make([]byte, len(matcher))
     match := make([]byte, 64)
@@ -53,18 +52,7 @@ func ScanFile(path string, matcher string, replacement string) {
 
         copyToMatch(match, chunk, last)
 
-        matchCount = bytes.Count(match, []byte(matcher))
-
-        for {
-            idx := bytes.Index(match, []byte(matcher))
-            copy(match, bytes.Replace(match, []byte(matcher), []byte(replacement), 1))
-
-            if idx == -1 {
-                break
-            }
-        }
-        fmt.Printf("matchct %v\n", matchCount)
-        fmt.Printf("match %v\n", string(match))
+        copy(match, bytes.Replace(match, []byte(matcher), []byte(replacement), -1))
 
         matchLen := nonNullByteCount(match)
         readAhead := len(matcher)
@@ -74,19 +62,13 @@ func ScanFile(path string, matcher string, replacement string) {
         offset := matchLen - readAhead
         fmt.Println(offset)
 
-        if matchCount > 0 {
-            tempfile.Write(match[:offset])
-
-            copy(last, match[offset:])
+        if n == 0 {
+            tempfile.Write(match[:matchLen])
+            break
         } else {
-            if n == 0 {
-                tempfile.Write(match[:matchLen])
-                break
-            } else {
-                tempfile.Write(match[:offset])
-            }
-            copy(last, match[offset:])
+            tempfile.Write(match[:offset])
         }
+        copy(last, match[offset:])
     }
 }
 
