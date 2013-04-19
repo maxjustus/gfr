@@ -88,7 +88,7 @@ func ScanFile(path string, stat os.FileInfo, matcher string, replacement string)
         return
     }
 
-    tempfile, err := ioutil.TempFile("./", "replacement")
+    tempfile, err := ioutil.TempFile("", "replacement")
 
     err = os.Chmod(tempfile.Name(), stat.Mode())
     if err != nil { panic(err) }
