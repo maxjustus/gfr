@@ -10,11 +10,15 @@ import (
     "sync"
     "flag"
     "bufio"
+    "runtime"
 )
 
 func main() {
-    var waitgroup sync.WaitGroup
-    throttle := make(chan bool, 40)
+    runtime.GOMAXPROCS(runtime.NumCPU())
+
+    var waitGroup sync.WaitGroup
+    var outMutex sync.Mutex
+    throttle := make(chan bool, 60)
     from, to, dir := parseFlags()
 
     filepath.Walk(dir, func (path string, fileinfo os.FileInfo, err error) error {
@@ -24,18 +28,18 @@ func main() {
         if err != nil { panic(err) }
 
         if (stat.Mode() & os.ModeType == 0) && !bytes.Contains([]byte(path), []byte(".git")) {
-            waitgroup.Add(1)
+            waitGroup.Add(1)
             throttle <- true
             go func() {
-                ScanFile(path, stat, from, to)
-                waitgroup.Done()
+                ScanFile(path, stat, from, to, outMutex)
+                waitGroup.Done()
                 <-throttle
             }()
         }
         return nil
     })
 
-    waitgroup.Wait()
+    waitGroup.Wait()
 }
 
 func parseFlags() (from string, to string, dir string) {
@@ -49,7 +53,7 @@ func parseFlags() (from string, to string, dir string) {
     return
 }
 
-func ScanFile(path string, stat os.FileInfo, matcher string, replacement string) {
+func ScanFile(path string, stat os.FileInfo, matcher string, replacement string, outMutex sync.Mutex) {
     f, err := os.Open(path)
     if err != nil { panic(err) }
     defer f.Close()
@@ -59,17 +63,30 @@ func ScanFile(path string, stat os.FileInfo, matcher string, replacement string)
     err = os.Chmod(tempfile.Name(), stat.Mode())
     if err != nil { panic(err) }
 
-    fmt.Println(path)
     defer tempfile.Close()
     defer os.Rename(tempfile.Name(), path)
     r := bufio.NewReader(f)
+    pathShown := false
+    var lineNumber uint64 = 0
 
     for {
         line, err := r.ReadBytes('\n')
         if err != nil && err != io.EOF { panic(err) }
         if len(line) == 0 { break }
 
+        lineNumber += 1
+        count := bytes.Count(line, []byte(matcher))
         replaced := bytes.Replace(line, []byte(matcher), []byte(replacement), -1)
+        if count > 0 {
+            //Yucky, need to figure out a way to have a printing goroutine instead of a mutex
+            outMutex.Lock()
+            if !pathShown {
+                pathShown = true
+                fmt.Println(path)
+            }
+            fmt.Printf("-%v: %v+%v: %v\n", lineNumber, string(line), lineNumber, string(replaced))
+            outMutex.Unlock()
+        }
         tempfile.Write(replaced)
     }
 }
