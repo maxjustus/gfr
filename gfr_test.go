@@ -5,7 +5,6 @@ import (
     "io/ioutil"
     "strings"
     "os"
-    "sync"
 )
 
 func TestScanFile(t *testing.T) {
@@ -20,9 +19,8 @@ func TestScanFile(t *testing.T) {
 
     stat, err := os.Lstat("./" + f.Name())
     if err != nil { panic(err) }
-    var outMutex sync.Mutex
 
-    ScanFile(f.Name(), stat, "herp", "0", outMutex)
+    ScanFile(f.Name(), stat, "herp", "0")
     changed, err := ioutil.ReadFile(f.Name())
     if string(changed) != expected {
         t.Error("Expected", expected, "got", string(changed))

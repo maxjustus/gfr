@@ -13,33 +13,52 @@ import (
     "runtime"
 )
 
+const CLR_R = "\x1b[31;1m"
+const CLR_G = "\x1b[32;1m"
+const CLR_N = "\x1b[0m"
+
 func main() {
     runtime.GOMAXPROCS(runtime.NumCPU())
 
     var waitGroup sync.WaitGroup
-    var outMutex sync.Mutex
     throttle := make(chan bool, 60)
+    out := make(chan []string, 60)
+    done := make(chan bool)
     from, to, dir := parseFlags()
 
-    filepath.Walk(dir, func (path string, fileinfo os.FileInfo, err error) error {
-        if err != nil { fmt.Println(err) }
+    go func() {
+        filepath.Walk(dir, func (path string, fileinfo os.FileInfo, err error) error {
+            if err != nil { fmt.Println(err) }
 
-        stat, err := os.Lstat(path)
-        if err != nil { panic(err) }
+            stat, err := os.Lstat(path)
+            if err != nil { panic(err) }
 
-        if (stat.Mode() & os.ModeType == 0) && !bytes.Contains([]byte(path), []byte(".git")) {
-            waitGroup.Add(1)
-            throttle <- true
-            go func() {
-                ScanFile(path, stat, from, to, outMutex)
-                waitGroup.Done()
-                <-throttle
-            }()
+            if (stat.Mode() & os.ModeType == 0) && !bytes.Contains([]byte(path), []byte(".git")) {
+                waitGroup.Add(1)
+                throttle <- true
+                go func() {
+                    out <- ScanFile(path, stat, from, to)
+                    waitGroup.Done()
+                    <-throttle
+                }()
+            }
+            return nil
+        })
+
+        waitGroup.Wait()
+        done <- true
+    }()
+
+    for {
+        select {
+        case lines := <-out:
+            for _, line := range lines {
+                fmt.Println(line)
+            }
+        case <-done:
+            return
         }
-        return nil
-    })
-
-    waitGroup.Wait()
+    }
 }
 
 func parseFlags() (from string, to string, dir string) {
@@ -53,7 +72,7 @@ func parseFlags() (from string, to string, dir string) {
     return
 }
 
-func ScanFile(path string, stat os.FileInfo, matcher string, replacement string, outMutex sync.Mutex) {
+func ScanFile(path string, stat os.FileInfo, matcher string, replacement string) (diffs []string) {
     f, err := os.Open(path)
     if err != nil { panic(err) }
     defer f.Close()
@@ -69,6 +88,8 @@ func ScanFile(path string, stat os.FileInfo, matcher string, replacement string,
     pathShown := false
     var lineNumber uint64 = 0
 
+    diffs = make([]string, 0)
+
     for {
         line, err := r.ReadBytes('\n')
         if err != nil && err != io.EOF { panic(err) }
@@ -77,16 +98,24 @@ func ScanFile(path string, stat os.FileInfo, matcher string, replacement string,
         lineNumber += 1
         count := bytes.Count(line, []byte(matcher))
         replaced := bytes.Replace(line, []byte(matcher), []byte(replacement), -1)
+
         if count > 0 {
-            //Yucky, need to figure out a way to have a printing goroutine instead of a mutex
-            outMutex.Lock()
             if !pathShown {
                 pathShown = true
-                fmt.Println(path)
+                diffs = append(diffs, path)
             }
-            fmt.Printf("-%v: %v+%v: %v\n", lineNumber, string(line), lineNumber, string(replaced))
-            outMutex.Unlock()
+            diffs = append(diffs, fmt.Sprintf("%v-%v: %v%v+%v: %v%v",
+                                               CLR_R,
+                                               lineNumber,
+                                               string(line),
+                                               CLR_G,
+                                               lineNumber,
+                                               string(replaced),
+                                               CLR_N))
         }
+
         tempfile.Write(replaced)
     }
+
+    return diffs
 }
