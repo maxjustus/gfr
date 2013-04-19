@@ -16,7 +16,11 @@ func TestScanFile(t *testing.T) {
     expected := strings.Replace(original, "herp", "0", -1)
 
     f.WriteString(original)
-    ScanFile(f.Name(), "herp", "0")
+
+    stat, err := os.Lstat("./" + f.Name())
+    if err != nil { panic(err) }
+
+    ScanFile(f.Name(), stat, "herp", "0")
     changed, err := ioutil.ReadFile(f.Name())
     if string(changed) != expected {
         t.Error("Expected", expected, "got", string(changed))

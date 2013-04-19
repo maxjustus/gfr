@@ -4,21 +4,31 @@ import (
     "fmt"
     "os"
     "io"
-    "bytes" /* use replacer */
+    "io/ioutil"
+    "bytes"
     "path/filepath"
     "sync"
+    "flag"
 )
 
 func main() {
     var waitgroup sync.WaitGroup
+    throttle := make(chan bool, 40)
+    from, to, dir := parseFlags()
 
-    filepath.Walk("./test", func (path string, fileinfo os.FileInfo, err error) error {
+    filepath.Walk(dir, func (path string, fileinfo os.FileInfo, err error) error {
         if err != nil { fmt.Println(err) }
-        if !fileinfo.IsDir() {
+
+        stat, err := os.Lstat(path)
+        if err != nil { panic(err) }
+
+        if (stat.Mode() & os.ModeType == 0) && !bytes.Contains([]byte(path), []byte(".git")) {
             waitgroup.Add(1)
+            throttle <- true
             go func() {
-                ScanFile(path, "Cool", "Kewl")
+                ScanFile(path, stat, from, to)
                 waitgroup.Done()
+                <-throttle
             }()
         }
         return nil
@@ -27,21 +37,34 @@ func main() {
     waitgroup.Wait()
 }
 
-func ScanFile(path string, matcher string, replacement string) {
+func parseFlags() (from string, to string, dir string) {
+    flag.Parse()
+    from = flag.Arg(0)
+    to   = flag.Arg(1)
+    dir  = flag.Arg(2)
+    if dir[0:2] != "./" {
+        dir = "./" + dir
+    }
+    return
+}
+
+func ScanFile(path string, stat os.FileInfo, matcher string, replacement string) {
     f, err := os.Open(path)
     if err != nil { panic(err) }
     defer f.Close()
 
-    stat, err := f.Stat()
+    tempfile, err := ioutil.TempFile("./", "replacement")
+
+    err = os.Chmod(tempfile.Name(), stat.Mode())
     if err != nil { panic(err) }
-    tempfile, err := os.OpenFile(".replacement", os.O_WRONLY|os.O_APPEND|os.O_CREATE, stat.Mode())
+
+    fmt.Println(path)
     defer tempfile.Close()
-    defer os.Remove(tempfile.Name())
     defer os.Rename(tempfile.Name(), path)
 
-    buf   := make([]byte, 32)
+    buf   := make([]byte, 512)
     last  := make([]byte, len(matcher))
-    match := make([]byte, 1024)
+    match := make([]byte, 10240)
 
     for {
         n, err := f.Read(buf)
@@ -71,25 +94,25 @@ func ScanFile(path string, matcher string, replacement string) {
 }
 
 func copyToMatch(match, chunk, last []byte) {
-        i := 0
+    i := 0
 
-        for i, _ := range match {
-            match[i] = 0
-        }
+    for i, _ := range match {
+        match[i] = 0
+    }
 
-        for _, b := range last {
-            if b != 0 {
-                match[i] = b
-                i++
-            }
+    for _, b := range last {
+        if b != 0 {
+            match[i] = b
+            i++
         }
+    }
 
-        for _, b := range chunk {
-            if b != 0 {
-                match[i] = b
-                i++
-            }
+    for _, b := range chunk {
+        if b != 0 {
+            match[i] = b
+            i++
         }
+    }
 }
 
 func nonNullByteCount(a []byte) int {
