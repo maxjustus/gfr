@@ -11,6 +11,7 @@ import (
     "flag"
     "bufio"
     "runtime"
+    "unicode/utf8"
 )
 
 const CLR_R = "\x1b[31;1m"
@@ -76,6 +77,16 @@ func ScanFile(path string, stat os.FileInfo, matcher string, replacement string)
     f, err := os.Open(path)
     if err != nil { panic(err) }
     defer f.Close()
+    r := bufio.NewReader(f)
+    formatCheck, err := r.Peek(1024)
+    if err != nil && err != io.EOF {
+        fmt.Println(err)
+        return
+    }
+
+    if !isValidFile(formatCheck) {
+        return
+    }
 
     tempfile, err := ioutil.TempFile("./", "replacement")
 
@@ -84,7 +95,6 @@ func ScanFile(path string, stat os.FileInfo, matcher string, replacement string)
 
     defer tempfile.Close()
     defer os.Rename(tempfile.Name(), path)
-    r := bufio.NewReader(f)
     pathShown := false
     var lineNumber uint64 = 0
 
@@ -118,4 +128,11 @@ func ScanFile(path string, stat os.FileInfo, matcher string, replacement string)
     }
 
     return diffs
+}
+
+func isValidFile(filePeek []byte) (valid bool) {
+    if !utf8.Valid(filePeek) {
+        return false
+    }
+    return true
 }
