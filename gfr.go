@@ -9,6 +9,7 @@ import (
     "path/filepath"
     "sync"
     "flag"
+    "bufio"
 )
 
 func main() {
@@ -61,67 +62,14 @@ func ScanFile(path string, stat os.FileInfo, matcher string, replacement string)
     fmt.Println(path)
     defer tempfile.Close()
     defer os.Rename(tempfile.Name(), path)
-
-    buf   := make([]byte, 512)
-    last  := make([]byte, len(matcher))
-    match := make([]byte, 10240)
+    r := bufio.NewReader(f)
 
     for {
-        n, err := f.Read(buf)
+        line, err := r.ReadBytes('\n')
         if err != nil && err != io.EOF { panic(err) }
+        if len(line) == 0 { break }
 
-        chunk := buf[:n]
-
-        copyToMatch(match, chunk, last)
-
-        copy(match, bytes.Replace(match, []byte(matcher), []byte(replacement), -1))
-
-        matchLen := nonNullByteCount(match)
-        readAhead := len(matcher)
-        if readAhead > n {
-            readAhead = n
-        }
-        offset := matchLen - readAhead
-
-        if n == 0 {
-            tempfile.Write(match[:matchLen])
-            break
-        } else {
-            tempfile.Write(match[:offset])
-        }
-        copy(last, match[offset:])
+        replaced := bytes.Replace(line, []byte(matcher), []byte(replacement), -1)
+        tempfile.Write(replaced)
     }
-}
-
-func copyToMatch(match, chunk, last []byte) {
-    i := 0
-
-    for i, _ := range match {
-        match[i] = 0
-    }
-
-    for _, b := range last {
-        if b != 0 {
-            match[i] = b
-            i++
-        }
-    }
-
-    for _, b := range chunk {
-        if b != 0 {
-            match[i] = b
-            i++
-        }
-    }
-}
-
-func nonNullByteCount(a []byte) int {
-    byteCt := 0
-    for _, b := range a {
-        if b != 0 {
-            byteCt++
-        }
-    }
-
-    return byteCt
 }
