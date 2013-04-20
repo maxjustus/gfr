@@ -12,7 +12,7 @@ func TestScanFile(t *testing.T) {
     if err != nil { panic(err) }
     defer os.Remove(f.Name())
 
-    original := "herpzherpzherp herpzherpzherp lol herp hahahaha herp man herp man dude herp buggz buggz buggz herp dorp herpp\nherp"
+    original := "herp\nfun\nherpzherpzherp herpzherpzherp lol herp hahahaha herp man herp man dude herp buggz buggz buggz herp dorp herpp\nherp"
     expected := strings.Replace(original, "herp", "0", -1)
 
     f.WriteString(original)

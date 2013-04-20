@@ -12,6 +12,7 @@ import (
     "bufio"
     "runtime"
     "unicode/utf8"
+    "strings"
 )
 
 const CLR_R = "\x1b[31;1m"
@@ -25,7 +26,7 @@ func main() {
     throttle := make(chan bool, 60)
     out := make(chan []string, 60)
     done := make(chan bool)
-    from, to, dir := parseFlags()
+    from, to, dir, formats := parseFlags()
 
     go func() {
         filepath.Walk(dir, func (path string, fileinfo os.FileInfo, err error) error {
@@ -34,7 +35,7 @@ func main() {
             stat, err := os.Lstat(path)
             if err != nil { panic(err) }
 
-            if (stat.Mode() & os.ModeType == 0) && !bytes.Contains([]byte(path), []byte(".git")) {
+            if (stat.Mode() & os.ModeType == 0) && shouldScan(path, formats) {
                 waitGroup.Add(1)
                 throttle <- true
                 go func() {
@@ -62,15 +63,49 @@ func main() {
     }
 }
 
-func parseFlags() (from string, to string, dir string) {
+func parseFlags() (from, to, dir string, formats []string) {
+    var formatsString string
+    flag.StringVar(&formatsString, "fmatch", "", "Comma separated list of filename matchers to limit search to")
+    flag.StringVar(&formatsString, "f", "", "Comma separated list of filename matchers to limit search to")
+
     flag.Parse()
     from = flag.Arg(0)
     to   = flag.Arg(1)
     dir  = flag.Arg(2)
+
     if dir[0:2] != "./" {
         dir = "./" + dir
     }
+
+    formats = strings.Split(formatsString, ",")
+    for i, f := range formats {
+        formats[i] = strings.TrimSpace(f)
+    }
+
     return
+}
+
+
+func shouldScan(path string, formats []string) bool {
+    defaultIgnore := []string{".git", ".jpg", ".jpeg", ".png"}
+    for _, ignore := range defaultIgnore {
+        if strings.Contains(path, ignore) {
+            return false
+        }
+    }
+
+    if len(formats) > 0 {
+        for _, format := range formats {
+            if strings.Contains(path, format) {
+                return true
+            }
+        }
+        return false
+    } else {
+        return false
+    }
+
+    return true
 }
 
 func ScanFile(path string, stat os.FileInfo, matcher string, replacement string) (diffs []string) {
