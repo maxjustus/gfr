@@ -2,6 +2,7 @@ package main
 
 import (
     "testing"
+    "gfr/scan"
     "io/ioutil"
     "strings"
     "os"
@@ -20,7 +21,7 @@ func TestScanFile(t *testing.T) {
     stat, err := os.Lstat("./" + f.Name())
     if err != nil { panic(err) }
 
-    ScanFile(f.Name(), stat, "herp", "0")
+    scan.ScanFile(f.Name(), stat, "herp", "0")
     changed, err := ioutil.ReadFile(f.Name())
     if string(changed) != expected {
         t.Error("Expected", expected, "got", string(changed))
